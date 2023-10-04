@@ -5,6 +5,7 @@
 
 import wpilib
 import wpilib.drive
+from wpilib import SmartDashboard
 from enum import Enum
 
 from greenUtil import *
@@ -27,7 +28,11 @@ class MyRobot(wpilib.TimedRobot):
 
         self.isClawOpen = False
         self.isClawClosed = False
-        
+        self.clawPosition = 0
+
+        # Sequence stuff
+        self.sequenceInProg = False
+
         self.left_motor = wpilib.Spark(0)
         self.right_motor = wpilib.Spark(1)
         self.drive = wpilib.drive.DifferentialDrive(self.left_motor, self.right_motor)
@@ -49,6 +54,15 @@ class MyRobot(wpilib.TimedRobot):
         # Sim stuff
         self.scheduler.add(staticmethod(self.simArm))
         self.scheduler.add(staticmethod(self.simClaw))
+
+    def robotPeriodic(self):
+        SmartDashboard.putBoolean("Arm Up", self.isArmUp)
+        SmartDashboard.putBoolean("Arm Down", self.isArmDown)
+        SmartDashboard.putNumber("Arm Position", self.armPosition)
+        SmartDashboard.putBoolean("Claw Open", self.isClawOpen)
+        SmartDashboard.putBoolean("Claw Closed", self.isClawClosed)
+        SmartDashboard.putNumber("Claw Position", self.clawPosition)
+        SmartDashboard.putBoolean("Sequence In Prog", self.sequenceInProg)
 
     def autonomousInit(self):
         self.scheduler.add_front(staticmethod(self.autoRoutine))
@@ -77,39 +91,7 @@ class MyRobot(wpilib.TimedRobot):
         # Testing shows we can execute 3 cycles before autonomous is over
         # This cycle starts with the arm in transit to the up position, and claw open
         for i in range(3):
-            print("{}: Begin cycle {}".format(self.scheduler.getTickCount(),i))
-            print("{}: Wait for arm to be up".format(self.scheduler.getTickCount()))
-            self.waitForArm(armCommand.up)
-
-            # Now in position to close the claw on the thing
-            print("{}: Pick the thing up".format(self.scheduler.getTickCount()))
-            self.clawClose()
-            self.waitForClawClosed()
-
-            # Rotate and put arm down
-            print("{}: Rotate clockwise".format(self.scheduler.getTickCount()))
-            self.drive.arcadeDrive(0,0.5)
-            self.armDown()
-
-            # Rotation takes 3 seconds
-            tick(50*3)
-            self.drive.arcadeDrive(0,0)
-
-            self.waitForArm(armCommand.down)
-
-            # Deposit the thing
-            print("{}: Deposit the thing".format(self.scheduler.getTickCount()))
-            self.clawOpen()
-
-            # Rotate back and put the arm up
-            print("{}: Rotate counter-clockwise".format(self.scheduler.getTickCount()))
-            self.drive.arcadeDrive(0,-0.5)
-
-            # Rotation takes 3 seconds
-            tick(50*3)
-            self.drive.arcadeDrive(0,0)
-
-            self.armUp()
+            self.loadCycle(i)
 
         print("Done with autonomous")
 
@@ -117,6 +99,46 @@ class MyRobot(wpilib.TimedRobot):
         # tick(WAIT_FOREVER)
 
         # ... but instead, we'll exit here, and just restart if auto mode is restarted
+
+    def loadCycle(self, i):
+        self.sequenceInProg = True
+        print("{}: Begin cycle {}".format(self.scheduler.getTickCount(),i))
+        print("{}: Wait for arm to be up".format(self.scheduler.getTickCount()))
+        self.waitForArm(armCommand.up)
+
+        # Now in position to close the claw on the thing
+        print("{}: Pick the thing up".format(self.scheduler.getTickCount()))
+        self.clawClose()
+        self.waitForClawClosed()
+
+        # Rotate and put arm down
+        print("{}: Rotate clockwise".format(self.scheduler.getTickCount()))
+        self.drive.arcadeDrive(0,0.5)
+        self.armDown()
+
+        # Rotation takes 3 seconds
+        tick(50*3)
+        self.drive.arcadeDrive(0,0)
+
+        self.waitForArm(armCommand.down)
+
+        # Deposit the thing
+        print("{}: Deposit the thing".format(self.scheduler.getTickCount()))
+        self.clawOpen()
+
+        # Rotate back and put the arm up
+        print("{}: Rotate counter-clockwise".format(self.scheduler.getTickCount()))
+        self.drive.arcadeDrive(0,-0.5)
+
+        # Rotation takes 3 seconds
+        tick(50*3)
+        self.drive.arcadeDrive(0,0)
+
+        # Only for automated sequence...
+        if i < 10:
+            self.armUp()
+            
+        self.sequenceInProg = False
 
 
     def teleopInit(self):
@@ -129,20 +151,25 @@ class MyRobot(wpilib.TimedRobot):
         while True:
             self.drive.arcadeDrive(self.stick.getY(), self.stick.getX())
 
-            
+            armButton = self.stick.getRawButton(1)
+            clawButton = self.stick.getRawButton(2)
+            loadCommand = self.stick.getRawButtonPressed(3)
 
-            armButton = self.stick.getRawButtonPressed(1)
-            clawButton = self.stick.getRawButtonPressed(0)
-
-            if armButton == True:
+            if loadCommand:
+                # Run the automated sequence once
                 self.armUp()
+                self.loadCycle(10)
+
             else:
-                self.armDown()
+                if armButton == True:
+                    self.armUp()
+                else:
+                    self.armDown()
             
-            if clawButton == True:
-                self.clawClose()
-            else:
-                self.clawOpen()
+                if clawButton == True:
+                    self.clawClose()
+                else:
+                    self.clawOpen()
             
             tick(1)
 
@@ -203,12 +230,12 @@ class MyRobot(wpilib.TimedRobot):
 
     def clawOpen(self):
         if self.isClawOpen == False:
-            print("Open Claw")
+            # print("Open Claw")
             self.claw_motor.set(0.5)
 
     def clawClose(self):
         if self.isClawClosed == False:
-            print("Close Claw")
+            # print("Close Claw")
             self.claw_motor.set(-0.5)
 
     def waitForClawOpen(self):
@@ -240,23 +267,22 @@ class MyRobot(wpilib.TimedRobot):
             tick(1)
 
     def simClaw(self):
-        clawPosition = 0
+        self.clawPosition = 0
         while True:
             if self.claw_motor.get() > 0:
-                clawPosition += 1
+                self.clawPosition += 1
             if self.claw_motor.get() < 0:
-                clawPosition -= 1
+                self.clawPosition -= 1
 
-            if clawPosition >= 25:
-                clawPosition = 25
-                if self.isClawOpen == False:
-                    print("Claw is open")
+            if self.clawPosition >= 25:
+                self.clawPosition = 25
                 self.isClawOpen = True
-            if clawPosition <= 0:
-                clawPosition = 0
-                if self.isClawClosed== False:
-                    print("Claw is closed")
+            elif self.clawPosition <= 0:
+                self.clawPosition = 0
                 self.isClawClosed = True
+            else:
+                self.isClawOpen = False
+                self.isClawClosed = False
             tick(1)
 
 
