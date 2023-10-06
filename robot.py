@@ -32,7 +32,9 @@ class MyRobot(wpilib.TimedRobot):
 
         # Sequence stuff
         self.sequenceInProg = False
-
+        self.runningCancellable = False
+        self.runningCancellableID = 0
+        
         self.left_motor = wpilib.Spark(0)
         self.right_motor = wpilib.Spark(1)
         self.drive = wpilib.drive.DifferentialDrive(self.left_motor, self.right_motor)
@@ -154,12 +156,30 @@ class MyRobot(wpilib.TimedRobot):
             armButton = self.stick.getRawButton(1)
             clawButton = self.stick.getRawButton(2)
             loadCommand = self.stick.getRawButtonPressed(3)
+            loadCommandCancellable = self.stick.getRawButtonPressed(4)
 
             if loadCommand:
                 # Run the automated sequence once
                 self.armUp()
                 self.loadCycle(10)
 
+            elif loadCommandCancellable:
+
+                if self.runningCancellable:
+                    self.scheduler.remove(self.runningCancellableID)
+                    self.runningCancellable = False
+
+                else:
+                    # Run the automated sequence once
+                    self.armUp()
+                    self.runningCancellableID = self.scheduler.add(staticmethod(self.loadCycle),10)
+                    self.runningCancellable = True
+                
+            elif self.runningCancellable == True:
+                # Check if the routine finished
+                if not self.scheduler.is_alive(self.runningCancellableID):
+                    self.runningCancellable == False
+                
             else:
                 if armButton == True:
                     self.armUp()
