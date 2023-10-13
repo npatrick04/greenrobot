@@ -7,17 +7,18 @@ import wpilib
 import wpilib.drive
 from wpilib import SmartDashboard
 from enum import Enum
-
+import greenrobot
+from greenrobot import GreenRobot
 from greenUtil import *
 
 class armCommand(Enum):
     down = 0
     up = 1
 
-class MyRobot(wpilib.TimedRobot):
+class MyRobot(GreenRobot):
 
     def robotInit(self):
-        self.scheduler = scheduler()
+        GreenRobot.robotInit(self)
 
         self.commandArm = armCommand.down
         self.isArmUp = False
@@ -51,13 +52,23 @@ class MyRobot(wpilib.TimedRobot):
         self.drive.setSafetyEnabled(False)
 
         # Application routines
-        self.scheduler.add(staticmethod(self.armRoutine))
+        GreenRobot.schedule(greenrobot.State.Autonomous,staticmethod(self.autoRoutine))
+        GreenRobot.schedule(greenrobot.State.Autonomous,staticmethod(self.armRoutine))
+
+        GreenRobot.schedule(greenrobot.State.Teleop,staticmethod(self.teleopRoutine))
+        GreenRobot.schedule(greenrobot.State.Teleop,staticmethod(self.armRoutine))
 
         # Sim stuff
-        self.scheduler.add(staticmethod(self.simArm))
-        self.scheduler.add(staticmethod(self.simClaw))
+        GreenRobot.schedule(greenrobot.State.Autonomous,staticmethod(self.simArm))
+        GreenRobot.schedule(greenrobot.State.Autonomous,staticmethod(self.simClaw))
+
+        GreenRobot.schedule(greenrobot.State.Teleop,staticmethod(self.simArm))
+        GreenRobot.schedule(greenrobot.State.Teleop,staticmethod(self.simClaw))
+
 
     def robotPeriodic(self):
+        GreenRobot.run()
+
         SmartDashboard.putBoolean("Arm Up", self.isArmUp)
         SmartDashboard.putBoolean("Arm Down", self.isArmDown)
         SmartDashboard.putNumber("Arm Position", self.armPosition)
@@ -65,16 +76,6 @@ class MyRobot(wpilib.TimedRobot):
         SmartDashboard.putBoolean("Claw Closed", self.isClawClosed)
         SmartDashboard.putNumber("Claw Position", self.clawPosition)
         SmartDashboard.putBoolean("Sequence In Prog", self.sequenceInProg)
-
-    def autonomousInit(self):
-        self.scheduler.add_front(staticmethod(self.autoRoutine))
-
-    def autonomousPeriodic(self):
-        # self.drive.arcadeDrive(0, 0)  # Stop robot
-
-        # Green
-        # self.autoRoutine.switch()
-        self.scheduler.run()
 
     def autoRoutine(self):
         print("Starting")
@@ -104,17 +105,17 @@ class MyRobot(wpilib.TimedRobot):
 
     def loadCycle(self, i):
         self.sequenceInProg = True
-        print("{}: Begin cycle {}".format(self.scheduler.getTickCount(),i))
-        print("{}: Wait for arm to be up".format(self.scheduler.getTickCount()))
+        print("{}: Begin cycle {}".format(GreenRobot.getTickCount(),i))
+        print("{}: Wait for arm to be up".format(GreenRobot.getTickCount()))
         self.waitForArm(armCommand.up)
 
         # Now in position to close the claw on the thing
-        print("{}: Pick the thing up".format(self.scheduler.getTickCount()))
+        print("{}: Pick the thing up".format(GreenRobot.getTickCount()))
         self.clawClose()
         self.waitForClawClosed()
 
         # Rotate and put arm down
-        print("{}: Rotate clockwise".format(self.scheduler.getTickCount()))
+        print("{}: Rotate clockwise".format(GreenRobot.getTickCount()))
         self.drive.arcadeDrive(0,0.5)
         self.armDown()
 
@@ -125,11 +126,11 @@ class MyRobot(wpilib.TimedRobot):
         self.waitForArm(armCommand.down)
 
         # Deposit the thing
-        print("{}: Deposit the thing".format(self.scheduler.getTickCount()))
+        print("{}: Deposit the thing".format(GreenRobot.getTickCount()))
         self.clawOpen()
 
         # Rotate back and put the arm up
-        print("{}: Rotate counter-clockwise".format(self.scheduler.getTickCount()))
+        print("{}: Rotate counter-clockwise".format(GreenRobot.getTickCount()))
         self.drive.arcadeDrive(0,-0.5)
 
         # Rotation takes 3 seconds
@@ -142,13 +143,6 @@ class MyRobot(wpilib.TimedRobot):
             
         self.sequenceInProg = False
 
-
-    def teleopInit(self):
-        self.scheduler.add_front(staticmethod(self.teleopRoutine))
-
-    def teleopPeriodic(self):
-        self.scheduler.run()
-
     def teleopRoutine(self):
         while True:
             self.drive.arcadeDrive(self.stick.getY(), self.stick.getX())
@@ -160,25 +154,32 @@ class MyRobot(wpilib.TimedRobot):
 
             if loadCommand:
                 # Run the automated sequence once
+                print("Start the auto routine - not cancellable")
                 self.armUp()
                 self.loadCycle(10)
+                print("Non-cancellable routine completed")
 
             elif loadCommandCancellable:
+                # Command for cancellable has been triggered
 
                 if self.runningCancellable:
-                    self.scheduler.remove(self.runningCancellableID)
+                    # Cancellable routine is already running, kill it
+                    print("Cancel the auto routine")
+                    GreenRobot.remove(self.runningCancellableID)
                     self.runningCancellable = False
 
                 else:
                     # Run the automated sequence once
+                    print("Start the auto routine - cancellable")
                     self.armUp()
-                    self.runningCancellableID = self.scheduler.add(staticmethod(self.loadCycle),10)
+                    self.runningCancellableID = GreenRobot.schedule(greenrobot.State.Current,staticmethod(self.loadCycle),11)
                     self.runningCancellable = True
                 
             elif self.runningCancellable == True:
                 # Check if the routine finished
-                if not self.scheduler.is_alive(self.runningCancellableID):
-                    self.runningCancellable == False
+                if not GreenRobot.is_alive(self.runningCancellableID):
+                    print("Cancellable routine completed")
+                    self.runningCancellable = False
                 
             else:
                 if armButton == True:

@@ -10,22 +10,37 @@ class scheduler():
         self.executing = []
         self.tickCount = 0
 
-    def add(self, routine, callvalue=None):
+    def reset(self):
+        """Reset all groutines to the default state.
+        Takes effect on next call to 'run'"""
+        for groutine in self.routines:
+            # Clean up the existing groutine
+            gr = groutine["groutine"]
+            gr.throw(greenlet.GreenletExit)
+            if groutine["temp"] == False:
+                # Recreate the groutine
+                groutine["groutine"] = greenlet.greenlet(groutine["routine"])
+
+    def add(self, routine, callvalue=None, temp=False):
         self.index = self.index + 1
-        groutine = {"routine":greenlet.greenlet(routine),
+        groutine = {"routine":routine,
                     "callvalue":callvalue,
                     "callarg": callvalue!=None,
-                    "routine_id":self.index}
+                    "routine_id":self.index,
+                    "groutine":greenlet.greenlet(routine),
+                    "temp":temp}
         self.routines.append(groutine)
         self.executing.append(groutine)
         return self.index
 
-    def add_front(self, routine, callvalue=None):
+    def add_front(self, routine, callvalue=None, temp=False):
         self.index = self.index + 1
-        groutine = {"routine":greenlet.greenlet(routine),
+        groutine = {"routine":routine,
                     "callvalue":callvalue,
                     "callarg": callvalue!=None,
-                    "routine_id":self.index}
+                    "routine_id":self.index,
+                    "groutine":greenlet.greenlet(routine),
+                    "temp":temp}
         self.routines.insert(0,groutine);
         self.executing.insert(0,groutine);
         return self.index
@@ -46,7 +61,7 @@ class scheduler():
     def run(self):
         self.executing = self.routines.copy()
         for groutine in self.executing:
-            glet = groutine["routine"]
+            glet = groutine["groutine"]
             callvalue = groutine["callvalue"]
             if groutine["callarg"]:
                 glet.switch(callvalue)
