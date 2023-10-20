@@ -1,4 +1,4 @@
-from scheduler import scheduler
+from greenrobot.scheduler import scheduler
 import wpilib
 from enum import Enum
 
@@ -20,6 +20,10 @@ class GreenRobot(wpilib.TimedRobot):
 
     def robotInit(self):
         GreenRobot.schedulers = [scheduler(),scheduler(),scheduler(),scheduler()]
+
+    # If robot code uses robotPeriodic, then it should also call GreenRobot.robotPeriodic(self)
+    def robotPeriodic(self):
+        GreenRobot.run()
 
     def current_state():
         state = None

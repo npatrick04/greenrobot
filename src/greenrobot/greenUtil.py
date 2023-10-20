@@ -1,5 +1,5 @@
 import greenlet
-from scheduler import scheduler
+from greenrobot.scheduler import scheduler
 
 WAIT_FOREVER = 0xFFFFFFFF
 
